@@ -7,7 +7,7 @@ MainWindow::MainWindow(QString username, QWidget *parent)
     , ui(new Ui::MainWindow), username(username)
 {
     ui->setupUi(this);
-    this->setWindowTitle(username);
+    ui->label->setText(username);
 }
 
 MainWindow::~MainWindow()

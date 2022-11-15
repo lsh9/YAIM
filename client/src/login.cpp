@@ -60,15 +60,15 @@ void Login::on_pushButtonRegister_clicked()
     char  code = -1;
     tmp_sock->waitForReadyRead(3000);
 
-    if (tmp_sock->read(&code, 1)  == 0){
+    if (tmp_sock->read(&code, 1)  <= 0){
         QMessageBox::information(this, "information", QString("Out of time, please try again!"));
     }
     else if (code == 0x0){
-        // 注册成功
+        // successfully register
         QMessageBox::information(this, "information", QString("Successfully registered!"));
     }
     else if (code == 0x1){
-        // 用户已存在
+        // user already exists
         QMessageBox::warning(this, "warning", QString("Fail to register since user existed!"));
     }
     tmp_sock->close();

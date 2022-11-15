@@ -24,8 +24,13 @@ FORMS += \
     ui/login.ui \
     ui/mainwindow.ui
 
+
+
 INCLUDEPATH += include/
 # Default rules for deployment.
 qnx: target.path = /tmp/$${TARGET}/bin
 else: unix:!android: target.path = /opt/$${TARGET}/bin
 !isEmpty(target.path): INSTALLS += target
+
+RESOURCES += \
+	yaim.qrc

@@ -2,10 +2,22 @@
 <ui version="4.0">
  <class>Login</class>
  <widget class="QDialog" name="Login">
-  <property name="windowTitle">
-   <string>登录</string>
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>398</width>
+    <height>274</height>
+   </rect>
   </property>
-  <widget class="QWidget" name="">
+  <property name="windowTitle">
+   <string>YAIM</string>
+  </property>
+  <property name="windowIcon">
+   <iconset resource="../yaim.qrc">
+    <normaloff>:/icon/yaim.ico</normaloff>:/icon/yaim.ico</iconset>
+  </property>
+  <widget class="QWidget" name="layoutWidget">
    <property name="geometry">
     <rect>
      <x>91</x>
@@ -22,14 +34,14 @@
         <item>
          <widget class="QLabel" name="label">
           <property name="text">
-           <string>用户名：</string>
+           <string>username:</string>
           </property>
          </widget>
         </item>
         <item>
          <widget class="QLabel" name="label_2">
           <property name="text">
-           <string>密码：</string>
+           <string>password:</string>
           </property>
          </widget>
         </item>
@@ -39,6 +51,9 @@
        <layout class="QVBoxLayout" name="verticalLayout">
         <item>
          <widget class="QLineEdit" name="lineEditUsername">
+          <property name="text">
+           <string>111111</string>
+          </property>
           <property name="maxLength">
            <number>16</number>
           </property>
@@ -49,6 +64,9 @@
         </item>
         <item>
          <widget class="QLineEdit" name="lineEditPassword">
+          <property name="text">
+           <string>111111</string>
+          </property>
           <property name="maxLength">
            <number>16</number>
           </property>
@@ -69,7 +87,7 @@
       <item>
        <widget class="QPushButton" name="pushButtonLogin">
         <property name="text">
-         <string>登录</string>
+         <string>login</string>
         </property>
        </widget>
       </item>
@@ -89,7 +107,7 @@
       <item>
        <widget class="QPushButton" name="pushButtonRegister">
         <property name="text">
-         <string>注册</string>
+         <string>register</string>
         </property>
        </widget>
       </item>
@@ -98,6 +116,8 @@
    </layout>
   </widget>
  </widget>
- <resources/>
+ <resources>
+  <include location="../yaim.qrc"/>
+ </resources>
  <connections/>
 </ui>
