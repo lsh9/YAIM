@@ -12,6 +12,7 @@ int main(int argc, char *argv[])
     database.setDatabaseName("yaim");
     if (database.open()){
         qDebug() << "连接成功";
+
     }
     else{
         qDebug() << database.lastError();

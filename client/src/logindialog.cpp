@@ -1,23 +1,45 @@
-#include "login.h"
-#include "ui_login.h"
+#include "logindialog.h"
+#include "ui_logindialog.h"
 #include "mainwindow.h"
-#include "socket.h"
-#include <QMessageBox>
 
-Login::Login(QWidget *parent)
-    : QDialog(parent)
-    , ui(new Ui::Login)
+#include <QMessageBox>
+#include <QDebug>
+
+
+#define kURL "ws://localhost:3000"
+#ifdef WIN32
+#define BIND_EVENT(IO,EV,FN) \
+do{ \
+        socket::event_listener_aux l = FN;\
+        IO->on(EV,l);\
+} while(0)
+#else
+#define BIND_EVENT(IO,EV,FN) \
+IO->on(EV,FN)
+#endif
+
+
+
+    LoginDialog::LoginDialog(QWidget *parent)
+    : QDialog(parent), ui(new Ui::Login), cli(new client())
 {
+
     ui->setupUi(this);
+    connect(this, &LoginDialog::requestSignIn, this, &LoginDialog::signin);
+    connect(this, &LoginDialog::requestSignUp, this, &LoginDialog::signup);
 }
 
-Login::~Login()
+LoginDialog::~LoginDialog()
 {
+    cli->close();
     delete ui;
 }
 
-bool Login::getInput()
+
+// 读取并判断用户名、密码框是否合法
+bool LoginDialog::getInput()
 {
+    //--------To Do: 增加输入判断，如命名规则等------
     username = ui->lineEditUsername->text();
     password = ui->lineEditPassword->text();
     if (username.isEmpty() || username.size() < 6){
@@ -31,46 +53,87 @@ bool Login::getInput()
     return true;
 }
 
+void LoginDialog::connectServer()
+{
+    if (!cli->opened()){
+        cli->connect(kURL);
+        qDebug() << "session id: " << QString::fromStdString(cli->get_sessionid());
+    }
+}
 
-void Login::on_pushButtonLogin_clicked()
+// 点击登录按钮响应事件
+void LoginDialog::on_pushButtonLogin_clicked()
 {
     if(!getInput()){
         return;
     }
 
-    socket->connectToHost(IP, PORT);
-    socket->write(username.toStdString().c_str(), 16);
-    socket->write(password.toStdString().c_str(), 16);
-    // 登录成功
-    this->close();
-    MainWindow* m = new MainWindow(username, this);
-    m->show();
+    connectServer();
+    // 向服务器发送用户名和密码，并将响应码用信号传递
+    // ------To Do: 加密密码-------
+    message::list l;
+    l.push(username.toStdString());
+    l.push(password.toStdString());
+
+    cli->socket()->emit("sign in", l, [&](const message::list l){
+        Q_EMIT requestSignIn(l[0]->get_int());
+    });
+}
+
+// 点击注册按钮响应事件
+void LoginDialog::on_pushButtonRegister_clicked()
+{
+    if(!getInput()){
+        return;
+    }
+
+    connectServer();
+    message::list l;
+    l.push(username.toStdString());
+    l.push(password.toStdString());
+
+    cli->socket()->emit("sign up", l, [&](const message::list l){
+        Q_EMIT requestSignUp(l[0]->get_int());
+    });
 }
 
 
-void Login::on_pushButtonRegister_clicked()
+void LoginDialog::signin(int type)
 {
-    if(!getInput()){
-        return;
+    MainWindow *w = nullptr;
+    switch (type) {
+    case 0:
+        cli->close();
+        this->close();
+        w = new MainWindow(username);
+        w->show();
+        break;
+    case 1:
+        QMessageBox::warning(this, "warning", QString("User has signed in!"));
+        break;
+    case 2:
+        QMessageBox::warning(this, "warning", QString("Fail to login, invalid username/password!"));
+        break;
+    default:
+        QMessageBox::warning(this, "warning", QString("Fail to sign in!"));
+        break;
     }
+}
 
-    QTcpSocket *tmp_sock = new QTcpSocket();
-    tmp_sock->connectToHost(IP, PORT);
-    tmp_sock->write(username.toStdString().c_str(), username.length());
-    char  code = -1;
-    tmp_sock->waitForReadyRead(3000);
-
-    if (tmp_sock->read(&code, 1)  <= 0){
-        QMessageBox::information(this, "information", QString("Out of time, please try again!"));
+void LoginDialog::signup(int type)
+{
+    switch (type) {
+    case 0:
+        if (QMessageBox::StandardButton::Yes == QMessageBox::question(this, "information", QString("Successfully Registered! Sign in right now?"))){
+            Q_EMIT requestSignIn(0);
+        }
+        break;
+    case 1:
+        QMessageBox::warning(this, "warning", QString("Fail to sign up since user existed!"));
+        break;
+    default:
+        QMessageBox::warning(this, "warning", QString("Fail to sign up!"));
+        break;
     }
-    else if (code == 0x0){
-        // successfully register
-        QMessageBox::information(this, "information", QString("Successfully registered!"));
-    }
-    else if (code == 0x1){
-        // user already exists
-        QMessageBox::warning(this, "warning", QString("Fail to register since user existed!"));
-    }
-    tmp_sock->close();
 }
 
