@@ -29,10 +29,12 @@ else: unix:!android: target.path = /opt/$${TARGET}/bin
 !isEmpty(target.path): INSTALLS += target
 
 RESOURCES += \
-	yaim.qrc
-
-win32:CONFIG(release, debug|release): LIBS += -L$$PWD/socket-io/lib/ -lsioclient
-else:win32:CONFIG(debug, debug|release): LIBS += -L$$PWD/socket-io/debug/lib -lsioclient
+	resource/yaim.qrc
 
 INCLUDEPATH += $$PWD/socket-io/include
-DEPENDPATH += $$PWD/socket-io/include
+
+win32:CONFIG(release, debug|release): LIBS += -L$$PWD/socket-io/lib/release/ -lsioclient
+else:win32:CONFIG(debug, debug|release): LIBS += -L$$PWD/socket-io/lib/debug/ -lsioclient
+
+
+
