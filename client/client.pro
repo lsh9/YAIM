@@ -1,4 +1,4 @@
-QT       += core gui
+QT       += core gui sql
 
 greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
 
@@ -9,13 +9,17 @@ CONFIG += no_keywords
 #DEFINES += QT_DISABLE_DEPRECATED_BEFORE=0x060000    # disables all the APIs deprecated before Qt 6.0.0
 
 SOURCES += \
+    src/database.cpp \
+    src/file.cpp \
     src/logindialog.cpp \
     src/main.cpp \
     src/mainwindow.cpp
 
 HEADERS += \
+    include/database.h \
+    include/file.h \
     include/logindialog.h \
-	include/mainwindow.h \
+	include/mainwindow.h
 
 FORMS += \
     ui/logindialog.ui \
@@ -30,6 +34,8 @@ else: unix:!android: target.path = /opt/$${TARGET}/bin
 
 RESOURCES += \
 	resource/yaim.qrc
+
+RC_ICONS = resource/yaim16x16.ico
 
 INCLUDEPATH += $$PWD/socket-io/include
 

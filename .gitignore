@@ -1,3 +1,5 @@
 *.user*
 build-*/
 debug/
+.vscode/
+node_modules/

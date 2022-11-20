@@ -14,8 +14,8 @@
    <string>YAIM</string>
   </property>
   <property name="windowIcon">
-   <iconset resource="../yaim.qrc">
-    <normaloff>:/icon/yaim.ico</normaloff>:/icon/yaim.ico</iconset>
+   <iconset resource="../resource/yaim.qrc">
+    <normaloff>:/icon/yaim.png</normaloff>:/icon/yaim.png</iconset>
   </property>
   <widget class="QWidget" name="layoutWidget">
    <property name="geometry">
@@ -120,7 +120,7 @@
   </widget>
  </widget>
  <resources>
-  <include location="../yaim.qrc"/>
+  <include location="../resource/yaim.qrc"/>
  </resources>
  <connections/>
 </ui>

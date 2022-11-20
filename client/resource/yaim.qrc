@@ -1,5 +1,5 @@
 <RCC>
     <qresource prefix="/icon">
-        <file>yaim.ico</file>
+        <file>yaim.png</file>
     </qresource>
 </RCC>

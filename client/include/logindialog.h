@@ -9,41 +9,38 @@
 
 using namespace sio;
 
-
 QT_BEGIN_NAMESPACE
-namespace Ui { class Login; }
+namespace Ui {
+class Login;
+}
 QT_END_NAMESPACE
 
-class LoginDialog : public QDialog
-{
-    Q_OBJECT
+class LoginDialog : public QDialog {
+	Q_OBJECT
 
-public:
-    LoginDialog(QWidget *parent = nullptr);
-    ~LoginDialog();
+   public:
+	LoginDialog(QWidget* parent = nullptr);
+	~LoginDialog();
 
+   Q_SIGNALS:
+	void requestSignIn(int);
+	void requestSignUp(int);
 
+   private Q_SLOTS:
+	void on_pushButtonLogin_clicked();
+	void on_pushButtonRegister_clicked();
 
-Q_SIGNALS:
-    void requestSignIn(int);
-    void requestSignUp(int);
+   private:
+	bool getInput();
+	void connectServer();
+	void signin(int);
+	void signup(int);
 
-private Q_SLOTS:
-    void on_pushButtonLogin_clicked();
-    void on_pushButtonRegister_clicked();
-
-private:
-    bool getInput();
-    void connectServer();
-    void signin(int);
-    void signup(int);
-
-private:
-    Ui::Login *ui;
-    QString username;
-    QString password;
-    std::unique_ptr<client> cli;
-
+   private:
+	Ui::Login* ui;
+	QString username;
+	QString password;
+	std::unique_ptr<client> cli;
 };
 
-#endif // LOGINDIALOG_H
+#endif	// LOGINDIALOG_H
