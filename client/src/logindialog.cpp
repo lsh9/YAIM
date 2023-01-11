@@ -1,11 +1,14 @@
+
 #include "logindialog.h"
 #include "mainwindow.h"
 #include "ui_logindialog.h"
 
+#include <QCryptographicHash>
 #include <QDebug>
+#include <QInputDialog>
 #include <QMessageBox>
+#include <QMetaType>
 
-#define kURL "ws://localhost:3000"
 #ifdef WIN32
 #define BIND_EVENT(IO, EV, FN)             \
 	do {                                   \
@@ -16,11 +19,12 @@
 #define BIND_EVENT(IO, EV, FN) IO->on(EV, FN)
 #endif
 
-LoginDialog::LoginDialog(QWidget* parent)
-	: QDialog(parent), ui(new Ui::Login), cli(new client()) {
+LoginDialog::LoginDialog(QWidget* parent) : QDialog(parent), ui(new Ui::Login), cli(new client()) {
 	ui->setupUi(this);
-	connect(this, &LoginDialog::requestSignIn, this, &LoginDialog::signin);
-	connect(this, &LoginDialog::requestSignUp, this, &LoginDialog::signup);
+	qRegisterMetaType<ResponseObject>("ResponseObject");
+	qRegisterMetaType<ResponseObject>("ResponseObject&");
+	connect(this, &LoginDialog::requestLogin, this, &LoginDialog::login, Qt::BlockingQueuedConnection);
+	connect(this, &LoginDialog::requestRegister, this, &LoginDialog::registration);
 }
 
 LoginDialog::~LoginDialog() {
@@ -34,13 +38,11 @@ bool LoginDialog::getInput() {
 	username = ui->lineEditUsername->text();
 	password = ui->lineEditPassword->text();
 	if (username.isEmpty() || username.size() < 6) {
-		QMessageBox::warning(this, "warning",
-							 QString("Please input valid username!"));
+		QMessageBox::warning(this, "warning", QString("Please input valid username!"));
 		return false;
 	}
 	if (password.isEmpty() || password.size() < 6) {
-		QMessageBox::warning(this, "warning",
-							 QString("Please input valid password!"));
+		QMessageBox::warning(this, "warning", QString("Please input valid password!"));
 		return false;
 	}
 	return true;
@@ -48,9 +50,8 @@ bool LoginDialog::getInput() {
 
 void LoginDialog::connectServer() {
 	if (!cli->opened()) {
-		cli->connect(kURL);
-		qDebug() << "session id: "
-				 << QString::fromStdString(cli->get_sessionid());
+		cli->connect(SERVER);
+		qDebug() << "session id: " << QString::fromStdString(cli->get_sessionid());
 	}
 }
 
@@ -61,15 +62,14 @@ void LoginDialog::on_pushButtonLogin_clicked() {
 	}
 
 	connectServer();
-	// 向服务器发送用户名和密码，并将响应码用信号传递
-	// ------To Do: 加密密码-------
-	message::list l;
-	l.push(username.toStdString());
-	l.push(password.toStdString());
+	// 通信
+	auto ptr = object_message::create();
+	std::string md5_password =
+		QCryptographicHash::hash(password.toStdString().c_str(), QCryptographicHash::Md5).toHex().toStdString();
 
-	cli->socket()->emit("sign in", l, [&](const message::list l) {
-		Q_EMIT requestSignIn(l[0]->get_int());
-	});
+	ptr->get_map()[std::string("username")] = string_message::create(username.toStdString());
+	ptr->get_map()[std::string("password")] = string_message::create(md5_password);
+	cli->socket()->emit("login", ptr, [&](const message::list l) { Q_EMIT requestLogin(l[0]->get_map()); });
 }
 
 // 点击注册按钮响应事件
@@ -78,57 +78,68 @@ void LoginDialog::on_pushButtonRegister_clicked() {
 		return;
 	}
 
-	connectServer();
-	message::list l;
-	l.push(username.toStdString());
-	l.push(password.toStdString());
+	bool ok = false;
+	nickname = QInputDialog::getText(this, tr("注册"), tr("请输入昵称:"), QLineEdit::Normal, "", &ok);
+	if (!ok) {
+		return;
+	}
+	if (nickname.isEmpty()) {
+		QMessageBox::information(NULL, "warning", "无效昵称！");
+		return;
+	}
 
-	cli->socket()->emit("sign up", l, [&](const message::list l) {
-		Q_EMIT requestSignUp(l[0]->get_int());
-	});
+	connectServer();
+	// 通信
+	auto ptr = object_message::create();
+	std::string md5_password =
+		QCryptographicHash::hash(password.toStdString().c_str(), QCryptographicHash::Md5).toHex().toStdString();
+
+	ptr->get_map()[std::string("nickname")] = string_message::create(nickname.toStdString());
+	ptr->get_map()[std::string("username")] = string_message::create(username.toStdString());
+	ptr->get_map()[std::string("password")] = string_message::create(md5_password);
+
+	cli->socket()->emit("register", ptr, [&](const message::list l) { Q_EMIT requestRegister(l[0]->get_map()); });
 }
 
-void LoginDialog::signin(int type) {
+void LoginDialog::login(ResponseObject resp) {
 	MainWindow* w = nullptr;
-	switch (type) {
-		case 0:
+	int code = resp["code"]->get_int();
+	switch (code) {
+		case NORMAL:
 			cli->close();
 			this->close();
-			w = new MainWindow(username);
+			w = new MainWindow(resp["user_id"]->get_int());
 			w->show();
 			break;
-		case 1:
-			QMessageBox::warning(this, "warning",
-								 QString("User has signed in!"));
+		case ACCOUNT_ALREADY_LOGIN_ERROR:
+			QMessageBox::warning(this, "warning", QString("用户已登录！"));
 			break;
-		case 2:
-			QMessageBox::warning(
-				this, "warning",
-				QString("Fail to login, invalid username/password!"));
+		case ACCOUNT_NOT_EXIST_ERROR:
+			QMessageBox::warning(this, "warning", QString("用户不存在！"));
+			break;
+		case ACCOUNT_PASSWORD_ERROR:
+			QMessageBox::warning(this, "warning", QString("密码错误！"));
 			break;
 		default:
-			QMessageBox::warning(this, "warning", QString("Fail to sign in!"));
+			QMessageBox::warning(this, "warning", QString("服务器异常！登陆失败。"));
 			break;
 	}
 }
 
-void LoginDialog::signup(int type) {
-	switch (type) {
-		case 0:
+void LoginDialog::registration(ResponseObject resp) {
+	int code = resp["code"]->get_int();
+	switch (code) {
+		case NORMAL:
 			if (QMessageBox::StandardButton::Yes ==
-				QMessageBox::question(
-					this, "information",
-					QString("Successfully Registered! Sign in right now?"))) {
-				Q_EMIT requestSignIn(0);
+				QMessageBox::question(this, "information", QString("注册成功！是否立即登录？"))) {
+				Q_EMIT requestLogin(resp);
 			}
 			break;
-		case 1:
-			QMessageBox::warning(
-				this, "warning",
-				QString("Fail to sign up since user existed!"));
+		case ACCOUNT_EXISTED_ERROR:
+			QMessageBox::warning(this, "warning", QString("用户已存在！"));
 			break;
 		default:
-			QMessageBox::warning(this, "warning", QString("Fail to sign up!"));
+			QMessageBox::warning(this, "warning", QString("服务器异常！注册失败。"));
 			break;
 	}
 }

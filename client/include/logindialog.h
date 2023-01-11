@@ -6,6 +6,7 @@
 #include <QThread>
 
 #include "sio_client.h"
+#include "defines.h"
 
 using namespace sio;
 
@@ -23,8 +24,8 @@ class LoginDialog : public QDialog {
 	~LoginDialog();
 
    Q_SIGNALS:
-	void requestSignIn(int);
-	void requestSignUp(int);
+	void requestLogin(ResponseObject);
+	void requestRegister(ResponseObject);
 
    private Q_SLOTS:
 	void on_pushButtonLogin_clicked();
@@ -33,13 +34,14 @@ class LoginDialog : public QDialog {
    private:
 	bool getInput();
 	void connectServer();
-	void signin(int);
-	void signup(int);
+	void login(ResponseObject);
+	void registration(ResponseObject);
 
    private:
 	Ui::Login* ui;
 	QString username;
 	QString password;
+    QString nickname;
 	std::unique_ptr<client> cli;
 };
 

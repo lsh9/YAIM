@@ -1,7 +1,10 @@
 QT       += core gui sql
 
 greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
-
+win32-msvc*: {
+    QMAKE_CFLAGS *= /utf-8
+    QMAKE_CXXFLAGS *= /utf-8
+}
 CONFIG += c++11
 CONFIG += no_keywords
 # You can make your code fail to compile if it uses deprecated APIs.
@@ -13,17 +16,22 @@ SOURCES += \
     src/file.cpp \
     src/logindialog.cpp \
     src/main.cpp \
-    src/mainwindow.cpp
+    src/mainwindow.cpp \
+    src/request.cpp
 
 HEADERS += \
     include/database.h \
+    include/defines.h \
     include/file.h \
     include/logindialog.h \
-	include/mainwindow.h
+	include/mainwindow.h \
+    include/request.h
 
 FORMS += \
     ui/logindialog.ui \
-    ui/mainwindow.ui
+    ui/mainwindow.ui \
+	ui/friendsPages.ui \
+	ui/createGroup.ui
 
 INCLUDEPATH += include/
 

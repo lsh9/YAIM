@@ -37,14 +37,14 @@
         <item>
          <widget class="QLabel" name="label">
           <property name="text">
-           <string>username:</string>
+           <string>用户名：</string>
           </property>
          </widget>
         </item>
         <item>
          <widget class="QLabel" name="label_2">
           <property name="text">
-           <string>password:</string>
+           <string>密   码：</string>
           </property>
          </widget>
         </item>
@@ -90,7 +90,7 @@
       <item>
        <widget class="QPushButton" name="pushButtonLogin">
         <property name="text">
-         <string>login</string>
+         <string>登录</string>
         </property>
        </widget>
       </item>
@@ -110,7 +110,7 @@
       <item>
        <widget class="QPushButton" name="pushButtonRegister">
         <property name="text">
-         <string>register</string>
+         <string>注册</string>
         </property>
        </widget>
       </item>

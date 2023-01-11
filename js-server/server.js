@@ -1,248 +1,371 @@
 const { Server } = require("socket.io");
 const io = new Server({ /* options */ });
-const mysql = require('mysql');
-const dbConfig = require('./database.js').dbConfig;
-const dbError = require('./database.js').dbError;
-
+const query = require('./database.js').query;
+const callbackCode = require('./database.js').callbackCode;
+const ERROR = require('./error.js');
 const moment = require('moment');
+const request = require('request');
 moment.locale('zh-cn');
-const username_to_socket = {};
-const socketid_to_username = {};
+
+
+
+// 记录在线用户
+var userid_to_socket = {};
+var socketid_to_userid = {};
 
 
 
 io.on("connection", (socket) => {
-	console.log("connection: " + "a user connected");
+	console.log("connection: an anonymous user connected");
 
-	// 连接数据库
-	const db = mysql.createConnection(dbConfig);
-	db.connect();
 
 	// 连接断开
 	socket.on("disconnect", () => {
-		try {
-			db.query("UPDATE user SET last_logout = ? WHERE username = ?", [moment().format('YYYY-MM-DD HH:mm:ss'), socketid_to_username[socket.id]], dbError);
-			db.end();
-			delete username_to_socket[socketid_to_username[socket.id]];
-			delete socketid_to_username[socket.id];
-		} catch (error) {
-			console.log(error);
-		}
-		finally {
-			console.log("disconnect: " + "a user disconnected");
+		if (socket.id in socketid_to_userid) {
+			query("UPDATE user SET last_logout = ?, is_online = ? WHERE user_id = ?", [moment().format('YYYY-MM-DD HH:mm:ss'), 0, socketid_to_userid[socket.id]]);
+			delete userid_to_socket[socketid_to_userid[socket.id]];
+			delete socketid_to_userid[socket.id];
+			console.log("disconnect: ", socketid_to_userid[socket.id]);
+		} else {
+			console.log("disconnect: an anonymous user disconnected");
 		}
 	});
 
 
-	// 注册
-	socket.on("sign up", (username, password, callback) => {
-		console.log("sign up: " + username + " " + password);
+	// ===================================================================================
+	// 									用户注册、登录、上线
+	// ===================================================================================
+	// 注册请求
+	socket.on("register", (data, callback) => {
+		username = data.username
+		nickname = data.nickname
+		password = data.password
+		console.log("register: " + username + " " + nickname + " " + password);
 
-		db.query("SELEct * FROM user WHERE username = ?", [username], (err, result) => {
+		query("SELECT * FROM user WHERE username = ?", [username], (err, result) => {
 			if (err) {
-				console.log(err);
-				callback(2);
+				callbackCode(callback, ERROR.DATABASE_INTERNAL_ERROR);
+				return;
 			}
-			if (result.length > 0) {
-				callback(1);
+			if (result.length > 0) {	// 已注册
+				callbackCode(callback, ERROR.ACCOUNT_EXISTED_ERROR);
 			} else {
-				db.query('INSERT INTO user (username, password) VALUES (?, ?)', [username, password], (err, result) => {
+				query('INSERT INTO user (username, nickname, password) VALUES (?, ?, ?)', [username, nickname, password], (err, result) => {
 					if (err) {
-						callback(2);
-						throw err;
+						callbackCode(callback, ERROR.DATABASE_INTERNAL_ERROR);
+						return;
 					}
-					console.log(result);
+					console.log("register:", result.insertId);
+					callback({
+						code: ERROR.NORMAL,
+						user_id: result.insertId
+					});
 				});
-				callback(0);
 			}
 		});
 	});
 
-	// 登录
-	socket.on("sign in", (username, password, callback) => {
-		console.log(username, password);
+	// 登录请求
+	socket.on("login", (data, callback) => {
+		username = data.username
+		password = data.password
+		console.log("login:", username, password);
 
-		db.query('SELECT * FROM user WHERE username = ? AND password = ?', [username, password], (err, result) => {
+		query('SELECT user_id, password FROM user WHERE username = ?', [username], (err, result) => {
 			if (err) {
-				callback(100);
-				throw err;
+				callbackCode(callback, ERROR.DATABASE_INTERNAL_ERROR);
+				return;
 			}
-			if (result.length == 0) {	// 用户名或密码错误
-				callback(2);
-			} else if (username in username_to_socket) {	// 用户已登录
-				callback(1);
+			if (result.length == 0) {	// 用户名不存在
+				callbackCode(callback, ERROR.ACCOUNT_NOT_EXIST_ERROR);
+			} else if (result[0].password != password) {	// 密码错误
+				callbackCode(callback, ERROR.ACCOUNT_PASSWORD_ERROR);
+			} else if (result[0].user_id in userid_to_socket) {	// 用户已登录
+				callbackCode(callback, ERROR.ACCOUNT_ALREADY_LOGIN_ERROR);
 			} else {	// 登录成功
-				console.log("sign in: " + "success");
-				callback(0);
+				console.log("login:", result[0].user_id);
+				callback({
+					code: ERROR.NORMAL,
+					user_id: result[0].user_id,
+				});
 			}
 		});
 	});
 
-	// 上线
-	socket.on("online", (username) => {
-		username_to_socket[username] = socket;
-		socketid_to_username[socket.id] = username;
-		console.log("online: " + username);
+	// 上线请求
+	socket.on("online", (data, callback) => {
+		user_id = data.user_id;
+		console.log("online:", user_id);
+		userid_to_socket[user_id] = socket;
+		socketid_to_userid[socket.id] = user_id;
+		query('SELECT * FROM user WHERE user_id = ?', [user_id], (err, result) => {
+			data = result[0]
+			delete data['password']
+			data.code = ERROR.NORMAL
+			console.log("online:", data);
+			callback(data);
+		});
+		// 通知所有在线好友
+		query('SELECT friend_id FROM friend WHERE user_id = ?', [user_id], (err, result) => {
+			for (var i = 0; i < result.length; i++) {
+				friend_id = result[i].friend_id
+				if (friend_id in userid_to_socket) {
+					userid_to_socket[friend_id].emit("friend online", {
+						user_id: user_id
+					});
+				}
+			}
+		});
+		// 更新数据库
+		query('UPDATE user SET is_online = 1 WHERE user_id = ?', [user_id]);
 	});
 
-	// 下线
-	socket.on("offline", (username) => {
-		delete username_to_socket[username];
-		console.log("offline: " + username);
-	});
 
-	// 客户端请求数据库同步到本地
+	//=============================================================================================
+	// 									读取用户信息（个人、好友、群组、文件、消息）
+	//=============================================================================================
+	// 获取用户个人信息
+	socket.on("get user information", (data, callback) => {
+		user_id = data.user_id
+		console.log("get user information: " + user_id);
+		query('SELECT * FROM user WHERE user_id = ?', [user_id], (err, result) => {
+			if (err) {
+				callbackCode(callback, ERROR.DATABASE_INTERNAL_ERROR);
+				return;
+			}
+			if (result.length == 0) {	// 用户不存在
+				callbackCode(callback, ERROR.ACCOUNT_NOT_EXIST_ERROR);
+			} else {
+				data = result[0]
+				delete data['password']
+				data.code = ERROR.NORMAL
+				callback(data);
+			}
+		});
+	});
 
 	// 获取好友列表
-	socket.on("get friends list", (username, callback) => {
-		console.log("get friends list: ", username);
-		db.query('SELECT * FROM relation WHERE owner = ?', [username], (err, result) => {
-			if (err) {
-				throw err;
-			}
-			callback(result);
+	socket.on("get friend list", (data, callback) => {
+		user_id = data.user_id
+		console.log("get friend list: ", user_id);
+		query('SELECT * FROM relation WHERE owner = ?', [user_id], (err, result) => {
+			console.log("get friend list: ", result);
+			callback({ result: result });
 		});
 	});
 
-	// 从服务器获取用户最近100条消息
-	socket.on("get messages list", (username, callback) => {
-		console.log("get messages list: ", username);
-		db.query('SELECT * FROM message WHERE receiver = ? or sender = ? ORDER BY time ASC LIMIT 100', [username, username], (err, result) => {
-			if (err) {
-				throw err;
-			}
+	// 获取好友信息列表
+	socket.on("get friend info list", (data, callback) => {
+		user_id = data.user_id
+		console.log("get friend info list: ", user_id);
+		query('SELECT * FROM user WHERE user_id IN (SELECT friend FROM relation WHERE owner = ?)', [user_id], (err, result) => {
+			console.log("get friend info list", result);
+			callback({ result: result });
+		});
+	});
+
+	// 获取群组信息列表
+	socket.on("get group list", (data, callback) => {
+		user_id = data.user_id
+		console.log("get group list: ", user_id);
+		query("SELECT * FROM `group` WHERE group_id IN (SELECT group_id FROM group_member WHERE user_id = ?)", [user_id], (err, result) => {
+			console.log("get group list", result);
+			callback({ result: result });
+		});
+	});
+
+	// 获取文件信息列表
+	socket.on("get file list", (data, callback) => {
+		user_id = data.user_id
+		console.log("get file list: ", user_id);
+		query('SELECT * FROM file WHERE user_id = ?', [user_id], (err, result) => {
+			console.log("get file list", result);
+			callback({ result: result });
+		});
+	});
+
+
+	// 获取所有消息
+	socket.on("get message list", (data, callback) => {
+		user_id = data.user_id
+		console.log("get messages list: ", user_id);
+		query('SELECT * FROM message WHERE from = ? or to = ?', [user_id, user_id], (err, result) => {
 			console.log(result);
 			callback(result);
 		});
 	});
 
-
-
-	// 用户点对点通信
-	socket.on("send message", (msg, callback) => {
-		sender = msg.sender;
-		receiver = msg.receiver;
-		content = msg.content;
-		time = moment(Date.now()).format('YYYY-MM-DD HH:mm:ss');
-		msg.time = time
-		console.log("send: " + sender + " send " + content + " to " + receiver);
-
-		// 保存到数据库
-		db.query('INSERT INTO message (sender, receiver, content, time) VALUES (?, ?, ?, ?)', [sender, receiver, content, time], (err, result) => {
-			if (err) {
-				throw err;
-			}
-			msg.msgid = result.insertId;
-
-			// 返回给发送者
-			if (sender != receiver) {
-				if (receiver in username_to_socket) {
-					username_to_socket[receiver].emit("receive message", msg);
-					console.log("emit receive message: from " + sender + " to " + receiver);
-				}
-				else {	// 接收方不在线
-					db.query('UPDATE relation SET unread = unread + 1 WHERE owner = ? AND friend = ?', [receiver, sender], dbError);
-					console.log("update unread: from" + sender + " to " + receiver);
-				}
-			}
-			console.log("msgid: ", msg.msgid);
-			callback({ msgid: msg.msgid, time: time });
+	// 获取所有未读消息
+	socket.on("get unread message list", (data, callback) => {
+		user_id = data.user_id
+		console.log("get unread messages list: ", user_id);
+		query('SELECT * FROM message WHERE to = ? and is_read = 0', [user_id], (err, result) => {
+			console.log(result);
+			callback(result);
 		});
 	});
 
+	// 获取群成员列表
+	socket.on("get group members", (data, callback) => {
+		group_id = data.group_id
+		console.log("get group members: ", group_id);
+		query('SELECT * FROM group_member WHERE group_id = ?', [group_id], (err, result) => {
+			callback(result);
+		});
+	});
 
-	//============================================================
-	// 申请添加好友
-	socket.on("add friend", (username, friend, callback) => {
-		console.log("add friend: ", username, friend);
-		db.query('SELECT * FROM relation WHERE owner = ? AND friend = ?', [username, friend], (err, result) => {
-			if (err) {
-				throw err;
-			}
-			if (result.length > 0) {
-				callback(1);
-			} else {
-				db.query('INSERT INTO relation (owner, friend) VALUES (?, ?)', [username, friend], (err, result) => {
+	// 获取在线好友列表
+	socket.on("get online friend list", (data, callback) => {
+		user_id = data.user_id
+		console.log("get online friend list: ", user_id);
+		query('SELECT * FROM relation WHERE owner = ?', [user_id], (err, result) => {
+			console.log("get online friend list: ", result);
+
+
+
+
+			//=============================================================================================
+			// 									用户在线请求
+			//=============================================================================================
+			// 发送消息
+			socket.on("send message", (data, callback) => {
+				from_id = data.from_id
+				to_id = data.to_id
+				source = data.source
+				type = data.type
+				payload = data.payload
+				time = moment(Date.now()).format('YYYY-MM-DD HH:mm:ss');
+				data.time = time
+				console.log("send message: ", from_id, to_id);
+
+				// 保存到数据库
+				query('INSERT INTO message (from_id, to_id, source, type, payload, time) VALUES (?, ?, ?, ?, ?, ?)', [from_id, to_id, source, type, payload, time], (err, result) => {
 					if (err) {
-						throw err;
+						callbackCode(callback, ERROR.DATABASE_INTERNAL_ERROR);
+						return;
 					}
+					data.msg_id = result.insertId;
+
+					// 返回给发送者
+					if (sender != receiver) {
+						if (receiver in userid_to_socket) {
+							userid_to_socket[receiver].emit("receive message", msg);
+							console.log("emit receive message: from " + sender + " to " + receiver);
+						}
+						else {	// 接收方不在线
+							query('UPDATE relation SET unread = unread + 1 WHERE owner = ? AND friend = ?', [receiver, sender], errorHandler);
+							console.log("update unread: from " + sender + " to " + receiver);
+						}
+					}
+					console.log("msgid: ", msg.msgid);
+					callback({ msgid: msg.msgid, time: time });
+				});
+			});
+
+			// ==============================好友请求==============================
+			// 申请添加好友
+			socket.on("request friend", (data, callback) => {
+				user_id = data.user_id
+				friend_id = data.friend_id
+				console.log("request friend: ", user_id, friend_id);
+				query('SELECT * FROM relation WHERE owner = ? AND friend = ?', [user_id, friend_id], (err, result) => {
+					if (err) {
+						callbackCode(callback, ERROR.DATABASE_INTERNAL_ERROR);
+						return;
+					}
+					if (result.length > 0) {
+						callbackCode(callback, ERROR.FRIEND_ALREADY_EXIST_ERROR);
+					} else {
+						query('INSERT INTO relation (owner, friend) VALUES (?, ?)', [user_id, friend_id], (err, result) => {
+							errorHandler(err);
+							callback(0);
+						});
+					}
+				});
+			});
+
+			// 处理好友申请
+			socket.on("deal friend apply", (data, callback) => {
+				user_id = data.user_id
+				friend_id = data.friend_id
+				console.log("deal friend apply: ", user_id, friend_id);
+				if (data.agree) {	// 同意添加好友
+					query('INSERT INTO relation (owner, friend) VALUES (?, ?)', [friend_id, user_id], (err) => {
+						if (err) {
+							callbackCode(callback, ERROR.DATABASE_INTERNAL_ERROR);
+							return;
+						}
+						callbackCode(callback, ERROR.NORMAL);
+					});
+				} else {	// 拒绝
+					query('DELETE FROM relation WHERE owner = ? AND friend = ?', [user_id, friend_id], (err) => {
+						if (err) {
+							callbackCode(callback, ERROR.DATABASE_INTERNAL_ERROR);
+							return;
+						}
+						callbackCode(callback, ERROR.NORMAL);
+					});
+				}
+			});
+
+			// 删除好友
+			socket.on("delete friend", (data, callback) => {
+				user_id = data.user_id
+				friend_id = data.friend
+				console.log("delete friend: ", user_id, friend_id);
+				query('DELETE FROM relation WHERE owner = ? AND friend = ?', [user_id, friend], (err) => {
+					errorHandler(err);
 					callback(0);
 				});
-			}
+			});
+
+
+			// ==============================群组请求==============================
+			// 创建群组
+			socket.on("create group", (data, callback) => {
+				user_id = data.user_id
+				group_name = data.group_name
+				console.log("create group: ", user_id, group_name);
+				query('INSERT INTO group (name) VALUES (?)', [group_name], (err, result) => {
+					console.log("create group: ", result);
+					callback({ group_id: result.insertId });
+				});
+			});
+
+			// 加入群组
+
+
+			// ==============================文件请求==============================
+			socket.on("upload file", (data, callback) => {
+				user_id = data.user_id
+				filename = data.filename
+				file = daa.file
+				request.post("http://localhost:5000/upload file", { formData: { file: file, json: true } }, (err, res, body) => {
+					console.log(body);
+					url = body.url;
+					callback({ url: url });
+				});
+			});
+
+			// 读取消息
+			socket.on("read message", (user_id, friend, callback) => {
+				console.log("read message: ", user_id, friend);
+				query('UPDATE relation SET unread = 0 WHERE owner = ? AND friend = ?', [user_id, friend], (err, result) => {
+					errorHandler(err);
+					callback(0);
+				});
+			});
+
+			// 读取所有消息
+			socket.on("read all message", (user_id, callback) => {
+				console.log("read all message: ", user_id);
+				query('UPDATE relation SET unread = 0 WHERE owner = ?', [user_id], (err, result) => {
+					errorHandler(err);
+					callback(0);
+				});
+			});
+
 		});
-	});
-
-	// 同意添加好友
-	socket.on("agree add friend", (username, friend, callback) => {
-		console.log("agree add friend: ", username, friend);
-		db.query('UPDATE relation SET status = 1 WHERE owner = ? AND friend = ?', [friend, username], (err, result) => {
-			if (err) {
-				throw err;
-			}
-			callback(0);
-		});
-	}
-	);
-
-	// 拒绝添加好友
-	socket.on("refuse add friend", (username, friend, callback) => {
-		console.log("refuse add friend: ", username, friend);
-		db.query('DELETE FROM relation WHERE owner = ? AND friend = ?', [friend, username], (err, result) => {
-			if (err) {
-				throw err;
-			}
-			callback(0);
-		});
-	}
-	);
-
-	// 删除好友
-	socket.on("delete friend", (username, friend, callback) => {
-		console.log("delete friend: ", username, friend);
-		db.query('DELETE FROM relation WHERE owner = ? AND friend = ?', [username, friend], (err, result) => {
-			if (err) {
-				throw err;
-			}
-			callback(0);
-		});
-	}
-	);
-
-	// 读取消息
-	socket.on("read message", (username, friend, callback) => {
-		console.log("read message: ", username, friend);
-		db.query('UPDATE relation SET unread = 0 WHERE owner = ? AND friend = ?', [username, friend], (err, result) => {
-			if (err) {
-				throw err;
-			}
-			callback(0);
-		});
-	});
-
-	// 读取所有消息
-	socket.on("read all message", (username, callback) => {
-		console.log("read all message: ", username);
-		db.query('UPDATE relation SET unread = 0 WHERE owner = ?', [username], (err, result) => {
-			if (err) {
-				throw err;
-			}
-			callback(0);
-		});
-	});
-
-	// // 用户下线
-	// socket.on("disconnect", () => {
-	// 	console.log("disconnect: ", socket.username);
-	// 	delete username_to_socket[socket.username];
-	// });
-
-	// 错误处理
-	socket.on("error", (err) => {
-		console.log("socket error: ", err);
-	});
 
 
-});
-
-
-io.listen(3000);
+		io.listen(3000);

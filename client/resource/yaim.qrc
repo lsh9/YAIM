@@ -1,5 +1,13 @@
 <RCC>
     <qresource prefix="/icon">
         <file>yaim.png</file>
+        <file>file.png</file>
+        <file>picture.png</file>
+        <file>加号 .png</file>
+        <file>聊天.png</file>
+        <file>删除好友.png</file>
+        <file>搜索.png</file>
+        <file>添加好友.png</file>
+        <file>通讯录.png</file>
     </qresource>
 </RCC>
