@@ -24,14 +24,14 @@ HEADERS += \
     include/defines.h \
     include/file.h \
     include/logindialog.h \
-	include/mainwindow.h \
+    include/mainwindow.h \
     include/request.h
 
 FORMS += \
     ui/logindialog.ui \
     ui/mainwindow.ui \
-	ui/friendsPages.ui \
-	ui/createGroup.ui
+    ui/friendsPages.ui \
+    ui/createGroup.ui
 
 INCLUDEPATH += include/
 
